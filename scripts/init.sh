@@ -8,12 +8,27 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WEB_ROOT="/usr/share/nginx/html"
 
-# ── 1. Get private IP from EC2 instance metadata ──────────────────────────────
+# ── 1. Get private IP from EC2 instance metadata (IMDSv2) ────────────────────
+# IMDSv2 requires a session token first — plain curl returns 401 on most
+# modern EC2 instances where IMDSv2 is enforced.
 echo "Fetching private IP from EC2 instance metadata..."
-PRIVATE_IP=$(curl -s --connect-timeout 3 http://169.254.169.254/latest/meta-data/local-ipv4)
 
-if [[ -z "$PRIVATE_IP" ]]; then
-  echo "ERROR: Could not reach EC2 instance metadata endpoint."
+IMDS_TOKEN=$(curl -s --connect-timeout 3 \
+  -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+
+if [[ -z "$IMDS_TOKEN" ]]; then
+  echo "ERROR: Could not obtain IMDSv2 token. Are you on an EC2 instance?"
+  exit 1
+fi
+
+PRIVATE_IP=$(curl -s --connect-timeout 3 \
+  -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" \
+  http://169.254.169.254/latest/meta-data/local-ipv4)
+
+# Validate — a real IP is short and contains only digits and dots
+if [[ -z "$PRIVATE_IP" || ! "$PRIVATE_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "ERROR: Metadata returned an unexpected value: $PRIVATE_IP"
   echo "Are you running this on an EC2 instance?"
   exit 1
 fi
