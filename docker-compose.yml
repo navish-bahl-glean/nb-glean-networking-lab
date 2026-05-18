@@ -1,0 +1,52 @@
+# KingdomOfTravel — WordPress on EC2
+# Usage:
+#   docker compose up -d
+#   Wait ~30s for MySQL to initialize, then visit http://<EC2-private-ip>
+#
+# For Glean Web connector: point it at http://<EC2-private-ip>/
+# For Glean WordPress connector: use http://<EC2-private-ip>/wp-json/wp/v2/
+
+version: "3.8"
+
+services:
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-wordpress}
+      MYSQL_USER: ${MYSQL_USER:-wpuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_wp}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  wordpress:
+    image: wordpress:6.5-apache
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE:-wordpress}
+      WORDPRESS_DB_USER: ${MYSQL_USER:-wpuser}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD:-changeme_wp}
+      WORDPRESS_TABLE_PREFIX: wp_
+    volumes:
+      - wp_data:/var/www/html
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/wp-login.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  db_data:
+  wp_data:
