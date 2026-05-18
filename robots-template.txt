@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: http://{{PRIVATE_IP}}/sitemap.xml
